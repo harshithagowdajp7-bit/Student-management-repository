@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import { useStudents } from '../hooks/useStudents';
 import { useToast } from '../components/Toast';
 import { StudentCard } from '../components/StudentCard';
@@ -8,10 +9,36 @@ import { Button } from '../components/Button';
 // Dashboard page component
 // Demonstrates useState, useEffect, custom hooks, and component composition
 export const Dashboard = () => {
-  const { students, loading, error, deleteStudent, searchStudents } = useStudents();
+  const { students, loading, error, deleteStudent, searchStudents, setStudents } = useStudents();
   const { success, error: showError } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+
+  // Real-time updates with Socket.io
+  useEffect(() => {
+    const socket = io(import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000', {
+      withCredentials: true
+    });
+
+    socket.on('student_created', (newStudent) => {
+      setStudents(prev => [newStudent, ...prev]);
+      success('New student added (Real-time)');
+    });
+
+    socket.on('student_updated', (updatedStudent) => {
+      setStudents(prev => prev.map(s => s._id === updatedStudent._id ? updatedStudent : s));
+      success('Student record updated (Real-time)');
+    });
+
+    socket.on('student_deleted', (deletedId) => {
+      setStudents(prev => prev.filter(s => s._id !== deletedId));
+      success('Student record removed (Real-time)');
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [setStudents, success]);
 
   // Show error toast when error occurs
   useEffect(() => {

@@ -124,6 +124,7 @@ export const useStudents = () => {
     addStudent,
     updateStudent,
     deleteStudent,
-    searchStudents
+    searchStudents,
+    setStudents
   };
 };

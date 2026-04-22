@@ -4,6 +4,11 @@ const service = require('../services/student.service');
 exports.createStudent = async (req, res, next) => {
   try {
     const student = await service.createStudent(req.body);
+    
+    // Emit real-time update
+    const io = req.app.get('socketio');
+    io.emit('student_created', student);
+    
     res.status(201).json(student);
   } catch (error) {
     next(error);
@@ -40,6 +45,11 @@ exports.updateStudent = async (req, res, next) => {
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
+    
+    // Emit real-time update
+    const io = req.app.get('socketio');
+    io.emit('student_updated', student);
+    
     res.status(200).json(student);
   } catch (error) {
     next(error);
@@ -53,6 +63,11 @@ exports.deleteStudent = async (req, res, next) => {
     if (!success) {
       return res.status(404).json({ message: 'Student not found' });
     }
+    
+    // Emit real-time update
+    const io = req.app.get('socketio');
+    io.emit('student_deleted', req.params.id);
+    
     res.status(200).json({ message: 'Deleted successfully' });
   } catch (error) {
     next(error);
