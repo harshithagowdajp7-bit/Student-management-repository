@@ -1,54 +1,71 @@
 const Student = require('../models/student.model');
-const generateId = require('../utils/generateId');
-
-let students = []; // in-memory storage
 
 // CREATE
-exports.createStudent = (data) => {
-  const newStudent = new Student({
-    id: generateId(),
-    ...data,
-  });
-  students.push(newStudent);
-  return newStudent;
+exports.createStudent = async (data) => {
+  try {
+    const student = new Student(data);
+    return await student.save();
+  } catch (error) {
+    throw new Error('Failed to create student: ' + error.message);
+  }
 };
 
 // GET ALL (with pagination + search)
-exports.getAllStudents = (query) => {
-  let result = [...students];
+exports.getAllStudents = async (query) => {
+  try {
+    const { page = 1, limit = 5, search } = query;
+    const skip = (page - 1) * limit;
 
-  if (query.search) {
-    result = result.filter(s =>
-      s.name.toLowerCase().includes(query.search.toLowerCase())
-    );
+    let filter = {};
+    if (search) {
+      filter.name = { $regex: search, $options: 'i' }; // Case-insensitive partial match
+    }
+
+    const students = await Student.find(filter)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 }); // Sort by newest first
+
+    const total = await Student.countDocuments(filter);
+    return { students, total, page: parseInt(page), limit: parseInt(limit) };
+  } catch (error) {
+    throw new Error('Failed to fetch students: ' + error.message);
   }
-
-  const page = parseInt(query.page) || 1;
-  const limit = parseInt(query.limit) || 5;
-
-  const start = (page - 1) * limit;
-  return result.slice(start, start + limit);
 };
 
 // GET BY ID
-exports.getStudentById = (id) => {
-  return students.find(s => s.id === id);
+exports.getStudentById = async (id) => {
+  try {
+    if (!require('mongoose').Types.ObjectId.isValid(id)) {
+      throw new Error('Invalid student ID');
+    }
+    return await Student.findById(id);
+  } catch (error) {
+    throw new Error('Failed to fetch students: ' + error.message);
+  }
 };
 
 // UPDATE
-exports.updateStudent = (id, data) => {
-  const index = students.findIndex(s => s.id === id);
-  if (index === -1) return null;
-
-  students[index] = { ...students[index], ...data };
-  return students[index];
+exports.updateStudent = async (id, data) => {
+  try {
+    if (!require('mongoose').Types.ObjectId.isValid(id)) {
+      throw new Error('Invalid student ID');
+    }
+    return await Student.findByIdAndUpdate(id, data, { new: true, runValidators: true });
+  } catch (error) {
+    throw new Error('Failed to update student: ' + error.message);
+  }
 };
 
 // DELETE
-exports.deleteStudent = (id) => {
-  const index = students.findIndex(s => s.id === id);
-  if (index === -1) return false;
-
-  students.splice(index, 1);
-  return true;
+exports.deleteStudent = async (id) => {
+  try {
+    if (!require('mongoose').Types.ObjectId.isValid(id)) {
+      throw new Error('Invalid student ID');
+    }
+    const result = await Student.findByIdAndDelete(id);
+    return !!result; // Return true if deleted
+  } catch (error) {
+    throw new Error('Failed to delete student: ' + error.message);
+  }
 };

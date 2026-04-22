@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { studentService } from '../utils/studentService';
+import { studentService } from '../services/studentService';
 
 // Custom hook for student data management
 // Demonstrates useState, useEffect, and useCallback concepts
@@ -19,7 +19,7 @@ export const useStudents = () => {
       setError(null);
       const result = await studentService.getStudents();
       if (result.success) {
-        setStudents(result.data);
+        setStudents(result.data.students || []);
       } else {
         setError(result.error);
       }
@@ -33,7 +33,8 @@ export const useStudents = () => {
   const addStudent = useCallback(async (studentData) => {
     try {
       setLoading(true);
-      const result = await studentService.addStudent(studentData);
+      setError(null);
+      const result = await studentService.createStudent(studentData);
       if (result.success) {
         setStudents(prev => [...prev, result.data]);
         return result.data;
@@ -42,7 +43,7 @@ export const useStudents = () => {
         return null;
       }
     } catch (err) {
-      setError('Failed to add student');
+      setError('Failed to add student. Please try again.');
       return null;
     } finally {
       setLoading(false);
@@ -52,6 +53,7 @@ export const useStudents = () => {
   const updateStudent = useCallback(async (id, studentData) => {
     try {
       setLoading(true);
+      setError(null);
       const result = await studentService.updateStudent(id, studentData);
       if (result.success) {
         setStudents(prev => 
@@ -65,7 +67,7 @@ export const useStudents = () => {
         return null;
       }
     } catch (err) {
-      setError('Failed to update student');
+      setError('Failed to update student. Please try again.');
       return null;
     } finally {
       setLoading(false);
@@ -75,21 +77,27 @@ export const useStudents = () => {
   const deleteStudent = useCallback(async (id) => {
     try {
       setLoading(true);
+      setError(null);
+      
+      // Optimistic UI update - remove student immediately
+      const originalStudents = [...students];
+      setStudents(prev => prev.filter(student => student.id !== parseInt(id)));
+      
       const result = await studentService.deleteStudent(id);
-      if (result.success) {
-        setStudents(prev => prev.filter(student => student.id !== parseInt(id)));
-        return true;
-      } else {
+      if (!result.success) {
+        // Rollback on failure
+        setStudents(originalStudents);
         setError(result.error);
         return false;
       }
+      return true;
     } catch (err) {
-      setError('Failed to delete student');
+      setError('Failed to delete student. Please try again.');
       return false;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [students]);
 
   const searchStudents = useCallback(async (query) => {
     try {
@@ -97,7 +105,7 @@ export const useStudents = () => {
       setError(null);
       const result = await studentService.searchStudents(query);
       if (result.success) {
-        setStudents(result.data);
+        setStudents(result.data.students || []);
       } else {
         setError(result.error);
       }

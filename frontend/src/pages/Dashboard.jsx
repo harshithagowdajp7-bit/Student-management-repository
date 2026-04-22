@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useStudents } from '../hooks/useStudents';
+import { useToast } from '../components/Toast';
 import { StudentCard } from '../components/StudentCard';
 import { Button } from '../components/Button';
 
@@ -8,8 +9,16 @@ import { Button } from '../components/Button';
 // Demonstrates useState, useEffect, custom hooks, and component composition
 export const Dashboard = () => {
   const { students, loading, error, deleteStudent, searchStudents } = useStudents();
+  const { success, error: showError } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+
+  // Show error toast when error occurs
+  useEffect(() => {
+    if (error) {
+      showError(error);
+    }
+  }, [error, showError]);
 
   // Handle search functionality
   const handleSearch = async (query) => {
@@ -223,7 +232,12 @@ export const Dashboard = () => {
                 // Navigate to edit page - this would use React Router's navigate
                 window.location.href = `/edit-student/${student.id}`;
               }}
-              onDelete={deleteStudent}
+              onDelete={async (id) => {
+                const result = await deleteStudent(id);
+                if (result) {
+                  success('Student deleted successfully!');
+                }
+              }}
               loading={loading}
             />
           ))

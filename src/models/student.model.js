@@ -1,11 +1,22 @@
-class Student {
-  constructor({ id, name, age, course }) {
-    this.id = id;
-    this.name = name;
-    this.age = age;
-    this.course = course;
-    this.createdAt = new Date();
-  }
-}
+﻿const mongoose = require('mongoose');
 
-module.exports = Student;
+const studentSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true
+  },
+  age: {
+    type: Number,
+    required: true
+  },
+  course: {
+    type: String,
+    required: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+module.exports = mongoose.model('Student', studentSchema);

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useStudents } from '../hooks/useStudents';
-import { studentService } from '../utils/studentService';
+import { useToast } from '../components/Toast';
+import { studentService } from '../services/studentService';
 import { StudentForm } from '../components/StudentForm';
 import { Button } from '../components/Button';
 
@@ -11,6 +12,7 @@ export const FormPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addStudent, updateStudent, loading } = useStudents();
+  const { success: showSuccess, error: showError } = useToast();
   const [student, setStudent] = useState(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -45,6 +47,12 @@ export const FormPage = () => {
   }, [id, isEditing]);
 
   // Handle form submission
+  useEffect(() => {
+    if (error) {
+      showError(error);
+    }
+  }, [error, showError]);
+
   const handleSubmit = async (formData) => {
     try {
       setError(null);
@@ -57,6 +65,7 @@ export const FormPage = () => {
       }
 
       if (result) {
+        showSuccess(`Student ${isEditing ? 'updated' : 'created'} successfully!`);
         setSuccess(true);
         // Redirect to dashboard after successful submission
         setTimeout(() => {
