@@ -1,43 +1,48 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const User = require('../models/user.model');
 
-/**
- * Authentication Middleware
- * Verifies JWT token from Authorization header and attaches user to request
- */
+// JWT Authentication Middleware
 const authenticate = async (req, res, next) => {
   try {
-    // Get token from Authorization header
-    const authHeader = req.header('Authorization');
+    // 1. Get token from header
+    let token;
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.cookies.token) {
+      token = req.cookies.token;
+    }
+
+    // 2. Check if token exists
+    if (!token) {
       return res.status(401).json({
         success: false,
-        message: 'Access denied. No token provided or invalid token format.'
+        message: 'Access denied. No token provided.'
       });
     }
 
-    // Extract token from "Bearer <token>"
-    const token = authHeader.substring(7);
-
-    // Verify token
+    // 3. Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Find user by ID (exclude password)
-    const user = await User.findById(decoded.userId).select('-password');
-    
-    if (!user) {
+
+    // 4. Check if user still exists
+    const currentUser = await User.findById(decoded.userId);
+    if (!currentUser) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid token. User not found.'
+        message: 'The user belonging to this token no longer exists.'
       });
     }
 
-    // Attach user to request object
-    req.user = user;
+    // 5. Attach user to request object
+    req.user = {
+      userId: currentUser._id,
+      email: currentUser.email,
+      role: currentUser.role
+    };
+
     next();
   } catch (error) {
-    // Handle different JWT errors
+    // Handle specific JWT errors
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({
         success: false,
@@ -46,48 +51,15 @@ const authenticate = async (req, res, next) => {
     } else if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,
-        message: 'Token expired. Please login again.'
-      });
-    } else {
-      return res.status(500).json({
-        success: false,
-        message: 'Server error during authentication.'
+        message: 'Token expired.'
       });
     }
+
+    next(error);
   }
 };
 
-/**
- * Optional Authentication Middleware
- * Attaches user to request if token is valid, but doesn't block if no token
- */
-const optionalAuth = async (req, res, next) => {
-  try {
-    const authHeader = req.header('Authorization');
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return next(); // Continue without authentication
-    }
-
-    const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId).select('-password');
-    
-    if (user) {
-      req.user = user;
-    }
-    
-    next();
-  } catch (error) {
-    // Silently continue if token is invalid
-    next();
-  }
-};
-
-/**
- * Role-based Authorization Middleware
- * Checks if user has required role
- */
+// Role-based authorization middleware
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -108,8 +80,39 @@ const authorize = (...roles) => {
   };
 };
 
+// Optional authentication (doesn't fail if no token)
+const optionalAuth = async (req, res, next) => {
+  try {
+    let token;
+    
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.cookies.token) {
+      token = req.cookies.token;
+    }
+
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const currentUser = await User.findById(decoded.userId);
+      
+      if (currentUser) {
+        req.user = {
+          userId: currentUser._id,
+          email: currentUser.email,
+          role: currentUser.role
+        };
+      }
+    }
+
+    next();
+  } catch (error) {
+    // For optional auth, we don't fail on token errors
+    next();
+  }
+};
+
 module.exports = {
   authenticate,
-  optionalAuth,
-  authorize
+  authorize,
+  optionalAuth
 };

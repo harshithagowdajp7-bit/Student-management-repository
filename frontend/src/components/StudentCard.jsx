@@ -12,7 +12,7 @@ export const StudentCard = ({
   // Handle delete with confirmation
   const handleDelete = () => {
     if (window.confirm(`Are you sure you want to delete ${student.name}?`)) {
-      onDelete(student.id);
+      onDelete(student._id);
     }
   };
 

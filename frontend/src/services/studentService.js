@@ -1,35 +1,20 @@
 // Real API service for student management
-// Replaces mock data with actual backend API calls using fetch API
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+// Uses authenticated API instance from authService
+import api from './authService';
 
 // Helper function for API requests
 const apiRequest = async (url, options = {}) => {
   try {
-    const response = await fetch(`${API_BASE_URL}${url}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+    const response = await api({
+      url: `/students${url}`,
       ...options,
     });
 
-    // Handle HTTP errors
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.message || 
-        errorData.error || 
-        `HTTP error! status: ${response.status}`
-      );
-    }
-
-    // Parse JSON response
-    const data = await response.json();
-    return data;
+    // Return response data
+    return response.data;
   } catch (error) {
     // Handle network errors and other exceptions
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    if (error.code === 'NETWORK_ERROR') {
       throw new Error('Network error. Please check your connection and ensure the backend server is running.');
     }
     throw error;
@@ -65,7 +50,7 @@ export const studentService = {
   // Get all students
   async getStudents() {
     try {
-      const response = await apiRequestWithRetry('/students');
+      const response = await apiRequestWithRetry('');
       return { success: true, data: response };
     } catch (error) {
       return { success: false, error: error.message };
@@ -75,10 +60,10 @@ export const studentService = {
   // Get student by ID
   async getStudentById(id) {
     try {
-      const response = await apiRequestWithRetry(`/students/${id}`);
+      const response = await apiRequestWithRetry(`/${id}`);
       return { success: true, data: response };
     } catch (error) {
-      if (error.message.includes('HTTP error! status: 404')) {
+      if (error.response?.status === 404) {
         return { success: false, error: 'Student not found' };
       }
       return { success: false, error: error.message };
@@ -88,14 +73,14 @@ export const studentService = {
   // Add new student
   async createStudent(studentData) {
     try {
-      const response = await apiRequest('/students', {
+      const response = await apiRequest('', {
         method: 'POST',
-        body: JSON.stringify(studentData),
+        data: studentData,
       });
       return { success: true, data: response };
     } catch (error) {
       // Handle validation errors
-      if (error.message.includes('HTTP error! status: 400')) {
+      if (error.response?.status === 400) {
         return { 
           success: false, 
           error: 'Invalid student data. Please check all fields and try again.',
@@ -109,16 +94,16 @@ export const studentService = {
   // Update student
   async updateStudent(id, studentData) {
     try {
-      const response = await apiRequest(`/students/${id}`, {
+      const response = await apiRequest(`/${id}`, {
         method: 'PUT',
-        body: JSON.stringify(studentData),
+        data: studentData,
       });
       return { success: true, data: response };
     } catch (error) {
-      if (error.message.includes('HTTP error! status: 404')) {
+      if (error.response?.status === 404) {
         return { success: false, error: 'Student not found' };
       }
-      if (error.message.includes('HTTP error! status: 400')) {
+      if (error.response?.status === 400) {
         return { 
           success: false, 
           error: 'Invalid student data. Please check all fields and try again.',
@@ -132,12 +117,12 @@ export const studentService = {
   // Delete student
   async deleteStudent(id) {
     try {
-      await apiRequest(`/students/${id}`, {
+      await apiRequest(`/${id}`, {
         method: 'DELETE',
       });
       return { success: true };
     } catch (error) {
-      if (error.message.includes('HTTP error! status: 404')) {
+      if (error.response?.status === 404) {
         return { success: false, error: 'Student not found' };
       }
       return { success: false, error: error.message };
@@ -147,11 +132,11 @@ export const studentService = {
   // Search students (if backend supports it)
   async searchStudents(query) {
     try {
-      const response = await apiRequestWithRetry(`/students?search=${encodeURIComponent(query)}`);
+      const response = await apiRequestWithRetry(`?search=${encodeURIComponent(query)}`);
       return { success: true, data: response };
     } catch (error) {
       // If search endpoint doesn't exist, fallback to client-side filtering
-      if (error.message.includes('HTTP error! status: 404')) {
+      if (error.response?.status === 404) {
         const allStudents = await this.getStudents();
         if (allStudents.success) {
           const filtered = allStudents.data.students?.filter(student =>

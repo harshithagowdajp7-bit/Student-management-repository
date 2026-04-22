@@ -1,55 +1,114 @@
 const express = require('express');
 const router = express.Router();
+
+// Import controllers
 const {
   signup,
   login,
-  getProfile,
-  updateProfile,
-  changePassword,
-  logout
+  logout,
+  getMe,
+  updatePassword
 } = require('../controllers/auth.controller');
+
+// Import middleware
 const { authenticate } = require('../middlewares/auth.middleware');
 
-/**
- * @route   POST /api/auth/signup
- * @desc    Register a new user
- * @access  Public
- */
-router.post('/signup', signup);
+// Validation middleware
+const validateSignup = (req, res, next) => {
+  const { name, email, password } = req.body;
+  
+  const errors = [];
+  
+  if (!name) {
+    errors.push('Name is required');
+  } else if (name.length < 2) {
+    errors.push('Name must be at least 2 characters long');
+  } else if (name.length > 50) {
+    errors.push('Name cannot exceed 50 characters');
+  }
+  
+  if (!email) {
+    errors.push('Email is required');
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.push('Please provide a valid email address');
+  }
+  
+  if (!password) {
+    errors.push('Password is required');
+  } else if (password.length < 6) {
+    errors.push('Password must be at least 6 characters long');
+  }
+  
+  if (errors.length > 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors
+    });
+  }
+  
+  next();
+};
 
-/**
- * @route   POST /api/auth/login
- * @desc    Login user and return JWT token
- * @access  Public
- */
-router.post('/login', login);
+const validateLogin = (req, res, next) => {
+  const { email, password } = req.body;
+  
+  const errors = [];
+  
+  if (!email) {
+    errors.push('Email is required');
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.push('Please provide a valid email address');
+  }
+  
+  if (!password) {
+    errors.push('Password is required');
+  }
+  
+  if (errors.length > 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors
+    });
+  }
+  
+  next();
+};
 
-/**
- * @route   POST /api/auth/logout
- * @desc    Logout user (client-side token removal)
- * @access  Public
- */
+const validatePasswordUpdate = (req, res, next) => {
+  const { currentPassword, newPassword } = req.body;
+  
+  const errors = [];
+  
+  if (!currentPassword) {
+    errors.push('Current password is required');
+  }
+  
+  if (!newPassword) {
+    errors.push('New password is required');
+  } else if (newPassword.length < 6) {
+    errors.push('New password must be at least 6 characters long');
+  }
+  
+  if (errors.length > 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors
+    });
+  }
+  
+  next();
+};
+
+// Public routes
+router.post('/signup', validateSignup, signup);
+router.post('/login', validateLogin, login);
 router.post('/logout', logout);
 
-/**
- * @route   GET /api/auth/profile
- * @desc    Get current user profile
- * @access  Private
- */
-router.get('/profile', authenticate, getProfile);
-
-/**
- * @route   PUT /api/auth/profile
- * @desc    Update current user profile
- * @access  Private
- */
-router.put('/profile', authenticate, updateProfile);
-
-/**
- * @route   PUT /api/auth/change-password
- * @desc    Change user password
- * @access  Private
- */
-router.put('/change-password', authenticate, changePassword);
+// Protected routes
+router.get('/me', authenticate, getMe);
+router.put('/update-password', authenticate, validatePasswordUpdate, updatePassword);
 
 module.exports = router;

@@ -226,11 +226,11 @@ export const Dashboard = () => {
         ) : (
           students.map((student) => (
             <StudentCard
-              key={student.id}
+              key={student._id}
               student={student}
               onEdit={(student) => {
                 // Navigate to edit page - this would use React Router's navigate
-                window.location.href = `/edit-student/${student.id}`;
+                window.location.href = `/edit-student/${student._id}`;
               }}
               onDelete={async (id) => {
                 const result = await deleteStudent(id);

@@ -58,7 +58,7 @@ export const useStudents = () => {
       if (result.success) {
         setStudents(prev => 
           prev.map(student => 
-            student.id === parseInt(id) ? result.data : student
+            student._id === id ? result.data : student
           )
         );
         return result.data;
@@ -81,7 +81,7 @@ export const useStudents = () => {
       
       // Optimistic UI update - remove student immediately
       const originalStudents = [...students];
-      setStudents(prev => prev.filter(student => student.id !== parseInt(id)));
+      setStudents(prev => prev.filter(student => student._id !== id));
       
       const result = await studentService.deleteStudent(id);
       if (!result.success) {

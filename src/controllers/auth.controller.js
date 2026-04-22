@@ -1,12 +1,7 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const User = require('../models/user.model');
 
-/**
- * Generate JWT Token
- * @param {string} userId - User ID
- * @param {string} email - User email
- * @returns {string} JWT Token
- */
+// Helper function to generate JWT token
 const generateToken = (userId, email) => {
   return jwt.sign(
     { userId, email },
@@ -15,73 +10,77 @@ const generateToken = (userId, email) => {
   );
 };
 
-/**
- * User Registration (Signup)
- * Creates a new user account with hashed password
- */
+// Helper function to send token response
+const sendTokenResponse = async (user, statusCode, res) => {
+  const token = generateToken(user._id, user.email);
+  
+  // Create cookie options
+  const cookieOptions = {
+    expires: new Date(
+      Date.now() + (process.env.JWT_COOKIE_EXPIRES_IN || 7) * 24 * 60 * 60 * 1000
+    ),
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  };
+
+  // Update last login
+  user.lastLogin = new Date();
+  await user.save({ validateBeforeSave: false });
+
+  res
+    .status(statusCode)
+    .cookie('token', token, cookieOptions)
+    .json({
+      success: true,
+      message: 'Authentication successful',
+      data: {
+        user: user.toPublicJSON(),
+        token
+      }
+    });
+};
+
+// SIGNUP
 exports.signup = async (req, res, next) => {
   try {
     const { name, email, password, role } = req.body;
-
-    // Validate input
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name, email, and password are required'
-      });
-    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'Email already registered'
+        message: 'User with this email already exists'
       });
     }
 
-    // Create new user (password will be hashed by pre-save middleware)
-    const user = new User({
+    // Create new user
+    const user = await User.create({
       name,
       email,
       password,
       role: role || 'user'
     });
 
-    await user.save();
-
-    // Generate JWT token
-    const token = generateToken(user._id, user.email);
-
-    res.status(201).json({
-      success: true,
-      message: 'User registered successfully',
-      data: {
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role
-        },
-        token
-      }
-    });
+    // Send token response
+    await sendTokenResponse(user, 201, res);
   } catch (error) {
     // Handle validation errors
     if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(err => err.message);
+      const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
-        errors: messages
+        errors
       });
     }
-    
+
     // Handle duplicate key error
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: 'Email already exists'
+        message: 'User with this email already exists'
       });
     }
 
@@ -89,10 +88,7 @@ exports.signup = async (req, res, next) => {
   }
 };
 
-/**
- * User Login
- * Authenticates user and returns JWT token
- */
+// LOGIN
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -101,44 +97,60 @@ exports.login = async (req, res, next) => {
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Email and password are required'
+        message: 'Please provide email and password'
       });
     }
 
-    // Find user by email and include password for comparison
+    // Find user and include password for comparison
     const user = await User.findOne({ email }).select('+password');
+
+    if (!user || !(await user.comparePassword(password))) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
+    }
+
+    // Send token response
+    await sendTokenResponse(user, 200, res);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// LOGOUT
+exports.logout = async (req, res, next) => {
+  try {
+    res.cookie('token', 'none', {
+      expires: new Date(Date.now() + 10 * 1000),
+      httpOnly: true
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET CURRENT USER
+exports.getMe = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.userId);
     
     if (!user) {
-      return res.status(401).json({
+      return res.status(404).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'User not found'
       });
     }
-
-    // Compare passwords
-    const isPasswordValid = await user.comparePassword(password);
-    
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password'
-      });
-    }
-
-    // Generate JWT token
-    const token = generateToken(user._id, user.email);
 
     res.status(200).json({
       success: true,
-      message: 'Login successful',
       data: {
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role
-        },
-        token
+        user: user.toPublicJSON()
       }
     });
   } catch (error) {
@@ -146,99 +158,29 @@ exports.login = async (req, res, next) => {
   }
 };
 
-/**
- * Get Current User Profile
- * Returns authenticated user information
- */
-exports.getProfile = async (req, res, next) => {
-  try {
-    // User is already attached to request by auth middleware
-    res.status(200).json({
-      success: true,
-      data: {
-        user: req.user
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Update User Profile
- * Updates authenticated user information
- */
-exports.updateProfile = async (req, res, next) => {
-  try {
-    const { name, email } = req.body;
-    const userId = req.user._id;
-
-    // Build update object
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
-
-    // Check if email is being updated and if it's already taken
-    if (email && email !== req.user.email) {
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email already exists'
-        });
-      }
-    }
-
-    // Update user
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      updateData,
-      { new: true, runValidators: true }
-    ).select('-password');
-
-    res.status(200).json({
-      success: true,
-      message: 'Profile updated successfully',
-      data: {
-        user: updatedUser
-      }
-    });
-  } catch (error) {
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: messages
-      });
-    }
-    next(error);
-  }
-};
-
-/**
- * Change Password
- * Updates user password
- */
-exports.changePassword = async (req, res, next) => {
+// UPDATE PASSWORD
+exports.updatePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    const userId = req.user._id;
 
-    // Validate input
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
         success: false,
-        message: 'Current password and new password are required'
+        message: 'Please provide current password and new password'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
       });
     }
 
     // Get user with password
-    const user = await User.findById(userId).select('+password');
-    
-    // Verify current password
-    const isCurrentPasswordValid = await user.comparePassword(currentPassword);
-    if (!isCurrentPasswordValid) {
+    const user = await User.findById(req.user.userId).select('+password');
+
+    if (!(await user.comparePassword(currentPassword))) {
       return res.status(400).json({
         success: false,
         message: 'Current password is incorrect'
@@ -249,37 +191,8 @@ exports.changePassword = async (req, res, next) => {
     user.password = newPassword;
     await user.save();
 
-    res.status(200).json({
-      success: true,
-      message: 'Password changed successfully'
-    });
-  } catch (error) {
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: messages
-      });
-    }
-    next(error);
-  }
-};
-
-/**
- * Logout (Client-side)
- * Note: JWT tokens are stateless, so actual logout happens on client side
- * This endpoint can be used for logging or token blacklisting if needed
- */
-exports.logout = async (req, res, next) => {
-  try {
-    // In a stateless JWT system, logout is handled client-side
-    // You can add token blacklisting logic here if needed
-    
-    res.status(200).json({
-      success: true,
-      message: 'Logout successful. Please remove token from client storage.'
-    });
+    // Send new token
+    await sendTokenResponse(user, 200, res);
   } catch (error) {
     next(error);
   }
